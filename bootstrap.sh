@@ -817,6 +817,7 @@ install_neovim() {
     print_header "Installing Neovim"
     
     local MIN_VERSION="0.10.0"
+    local need_install=false
     
     # Fetch latest version from GitHub first (needed for version comparison)
     print_step "Checking latest Neovim version..."
@@ -840,6 +841,7 @@ install_neovim() {
             print_warning "Neovim version is below minimum requirement ($MIN_VERSION)"
             print_info "Your config requires Neovim >= $MIN_VERSION for lazydev.nvim and vim.lsp.config API"
             print_step "Auto-upgrading Neovim..."
+            need_install=true
         # Check if current version is at or above latest
         elif printf '%s\n%s\n' "$LATEST_VERSION" "$current_version" | sort -V | head -1 | grep -q "^$LATEST_VERSION$"; then
             print_success "Neovim is already at latest version"
@@ -854,6 +856,11 @@ install_neovim() {
             print_warning "Skipping Neovim"
             return
         fi
+        need_install=true
+    fi
+    
+    if [ "$need_install" != true ]; then
+        return
     fi
     
     # Proceed with installation
@@ -1055,11 +1062,6 @@ install_nerd_font() {
         return
     fi
     
-    if ! confirm "Install $NERD_FONT Nerd Font?"; then
-        print_warning "Skipping Nerd Font"
-        return
-    fi
-    
     local font_dir
     case "$OS" in
         macos)
@@ -1072,10 +1074,16 @@ install_nerd_font() {
     
     mkdir -p "$font_dir"
     
-    # Check if already installed
+    # Check if already installed FIRST, before any prompts
     if ls "$font_dir"/*"$NERD_FONT"* &>/dev/null; then
-        print_info "$NERD_FONT Nerd Font appears to be already installed"
+        print_info "$NERD_FONT Nerd Font is already installed"
         if ! confirm "Reinstall?"; then
+            return
+        fi
+    else
+        # Only prompt to install if not already present
+        if ! confirm "Install $NERD_FONT Nerd Font?"; then
+            print_warning "Skipping Nerd Font"
             return
         fi
     fi
