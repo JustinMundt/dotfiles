@@ -1,0 +1,17 @@
+# =============================================================================
+# .zsh_profile - Environment variables and PATH modifications
+# =============================================================================
+# This file is sourced by .zshrc
+# Use this for:
+#   - PATH modifications
+#   - Environment variables
+#   - Machine-specific settings
+#
+# Keep secrets (API keys, passwords) in ~/.secrets instead (not tracked by git)
+# =============================================================================
+
+# Add custom paths here
+# export PATH="$HOME/custom/bin:$PATH"
+
+# Add environment variables here
+# export MY_VAR="value"

@@ -1,0 +1,52 @@
+# =============================================================================
+# Dotfiles .gitignore
+# =============================================================================
+
+# Secrets - NEVER commit these
+.secrets
+*.secrets
+.env
+.env.*
+!.env.example
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*:Zone.Identifier
+
+# Editor files
+*.swp
+*.swo
+*.swn
+*~
+.*.un~
+*.bak
+*.backup
+*.orig
+
+# Vim
+.netrwhist
+Session.vim
+tags
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Compiled files
+*.o
+*.pyc
+__pycache__/
+
+# Logs
+*.log
+
+# Local/machine-specific overrides (if you add them)
+*.local
+!.tmux.conf.local.example
