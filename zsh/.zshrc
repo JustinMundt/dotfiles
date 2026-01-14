@@ -15,16 +15,13 @@ alias insightsproduction="cd ~/work/projects/insights_prod/intermountain-insight
 
 # Path to your oh-my-zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
-# export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
-export PATH="$PATH:$HOME/bin:/opt/nvim-linux-x86_64/bin"
-export PATH=$PATH:/usr/local/go/bin
-# export PATH="$PATH:$HOME/go/bin
-#
+
+# Editor
 export EDITOR=nvim
 export VISUAL=nvim
 
-# opencode
-export PATH=/home/justin/.opencode/bin:$PATH
+# OpenCode
+export PATH="$HOME/.opencode/bin:$PATH"
 
 # Load secrets (API keys, etc.) from ~/.secrets if it exists
 # See .secrets.example for required variables
@@ -149,7 +146,7 @@ take_audio() {
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git)
+plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -209,8 +206,17 @@ source ~/.zsh_profile
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 # [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
+# NVM (Node Version Manager)
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-export PATH=$PATH:/usr/local/go/bin
+
+# Rust/Cargo
+[[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
+
+# Go
+export PATH="$PATH:/usr/local/go/bin"
+export PATH="$PATH:$HOME/go/bin"
+
+# Local bin
 export PATH="$HOME/.local/bin:$PATH"
