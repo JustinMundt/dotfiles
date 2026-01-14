@@ -1077,6 +1077,10 @@ install_nerd_font() {
     # Check if already installed FIRST, before any prompts
     if ls "$font_dir"/*"$NERD_FONT"* &>/dev/null; then
         print_info "$NERD_FONT Nerd Font is already installed"
+        # In --yes mode, don't reinstall existing software
+        if [ "$AUTO_YES" = true ]; then
+            return
+        fi
         if ! confirm "Reinstall?"; then
             return
         fi
@@ -1201,21 +1205,25 @@ setup_neovim_plugins() {
         return
     fi
     
-    if ! confirm "Run Neovim headless to install plugins (Lazy.nvim) and LSP servers (Mason)?"; then
+    if ! confirm "Run Neovim headless to install plugins (Lazy.nvim), tree-sitter parsers, and LSP servers (Mason)?"; then
         print_warning "Skipping Neovim plugin setup"
         print_info "Plugins will be installed on first Neovim launch"
         return
     fi
     
     print_step "Installing Neovim plugins via Lazy.nvim..."
-    nvim --headless "+Lazy! sync" +qa 2>/dev/null || true
+    nvim --headless "+Lazy! sync" +qa || true
+    
+    print_step "Installing tree-sitter parsers..."
+    nvim --headless "+TSUpdate" +qa || true
     
     print_step "Waiting for Mason to install LSP servers..."
     print_info "This may take a few minutes..."
-    # Run nvim briefly to trigger Mason installations
-    nvim --headless -c "sleep 30" -c "qa!" 2>/dev/null || true
+    # Opening nvim triggers mason-lspconfig's ensure_installed
+    # Give it 60 seconds to download and install LSP servers
+    nvim --headless -c "sleep 60" -c "qa!" || true
     
-    mark_installed "Neovim plugins (Lazy.nvim)"
+    mark_installed "Neovim plugins (Lazy.nvim + TreeSitter)"
     print_success "Neovim plugins installed"
 }
 
