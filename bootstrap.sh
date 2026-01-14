@@ -812,13 +812,25 @@ install_neovim() {
     print_header "Installing Neovim"
     
     local need_install=true
+    local MIN_VERSION="0.10.0"
     
     if command_exists nvim; then
         local current_version
-        current_version=$(nvim --version | head -1 | awk '{print $2}')
+        current_version=$(nvim --version | head -1 | awk '{print $2}' | sed 's/^v//')
         print_info "Neovim is already installed (version $current_version)"
-        if ! confirm "Reinstall/update Neovim?"; then
-            need_install=false
+        
+        # Check if version meets minimum requirement
+        if printf '%s\n%s\n' "$MIN_VERSION" "$current_version" | sort -V | head -1 | grep -q "^$MIN_VERSION$"; then
+            print_success "Neovim version meets minimum requirement (>= $MIN_VERSION)"
+            if ! confirm "Reinstall/update Neovim anyway?"; then
+                need_install=false
+            fi
+        else
+            print_warning "Neovim version is below minimum requirement ($MIN_VERSION)"
+            print_info "Your config requires Neovim >= $MIN_VERSION for lazydev.nvim and vim.lsp.config API"
+            if ! confirm "Update Neovim to latest version?"; then
+                need_install=false
+            fi
         fi
     else
         if ! confirm "Install Neovim?"; then
@@ -829,22 +841,62 @@ install_neovim() {
     
     if [ "$need_install" = true ]; then
         case "$OS" in
-            debian)
-                # Use PPA for latest stable
-                print_step "Adding Neovim PPA..."
-                $SUDO_CMD apt install -y software-properties-common
-                $SUDO_CMD add-apt-repository -y ppa:neovim-ppa/stable
-                $SUDO_CMD apt update
-                $SUDO_CMD apt install -y neovim
-                ;;
-            fedora)
-                pkg_install neovim
-                ;;
-            arch)
-                pkg_install neovim
-                ;;
             macos)
-                brew install neovim
+                # Use Homebrew on macOS (provides latest stable)
+                brew install neovim || brew upgrade neovim
+                ;;
+            *)
+                # Linux: Install from GitHub releases for latest stable version
+                print_step "Fetching latest Neovim release from GitHub..."
+                
+                local NVIM_VERSION
+                NVIM_VERSION=$(curl -s "https://api.github.com/repos/neovim/neovim/releases/latest" | grep -Po '"tag_name": "\K[^"]*')
+                
+                if [ -z "$NVIM_VERSION" ]; then
+                    print_error "Could not fetch latest Neovim version from GitHub"
+                    print_info "Falling back to package manager..."
+                    case "$OS" in
+                        debian) pkg_install neovim ;;
+                        fedora) pkg_install neovim ;;
+                        arch) pkg_install neovim ;;
+                    esac
+                    return
+                fi
+                
+                print_info "Latest Neovim version: $NVIM_VERSION"
+                
+                local arch
+                case "$(uname -m)" in
+                    x86_64) arch="x86_64" ;;
+                    aarch64|arm64) arch="aarch64" ;;
+                    *) 
+                        print_error "Unsupported architecture: $(uname -m)"
+                        print_info "Falling back to package manager..."
+                        case "$OS" in
+                            debian) pkg_install neovim ;;
+                            fedora) pkg_install neovim ;;
+                            arch) pkg_install neovim ;;
+                        esac
+                        return
+                        ;;
+                esac
+                
+                local nvim_tar="nvim-linux-${arch}.tar.gz"
+                local nvim_url="https://github.com/neovim/neovim/releases/download/${NVIM_VERSION}/${nvim_tar}"
+                
+                print_step "Downloading Neovim ${NVIM_VERSION}..."
+                curl -fsSL -o "/tmp/${nvim_tar}" "$nvim_url"
+                
+                # Remove old installation if exists
+                print_step "Installing Neovim to /opt/nvim..."
+                $SUDO_CMD rm -rf /opt/nvim
+                $SUDO_CMD mkdir -p /opt/nvim
+                $SUDO_CMD tar -xzf "/tmp/${nvim_tar}" -C /opt/nvim --strip-components=1
+                rm "/tmp/${nvim_tar}"
+                
+                # Create symlink to /usr/local/bin
+                print_step "Creating symlink in /usr/local/bin..."
+                $SUDO_CMD ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
                 ;;
         esac
         
