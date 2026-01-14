@@ -1211,17 +1211,20 @@ setup_neovim_plugins() {
         return
     fi
     
+    # Ensure Go and Cargo are in PATH for Mason to install LSP servers
+    local NVIM_PATH="/usr/local/go/bin:$HOME/.cargo/bin:$PATH"
+    
     print_step "Installing Neovim plugins via Lazy.nvim..."
-    nvim --headless "+Lazy! sync" +qa || true
+    PATH="$NVIM_PATH" nvim --headless "+Lazy! sync" +qa || true
     
     print_step "Installing tree-sitter parsers..."
-    nvim --headless "+TSUpdate" +qa || true
+    PATH="$NVIM_PATH" nvim --headless "+TSUpdate" +qa || true
     
     print_step "Waiting for Mason to install LSP servers..."
     print_info "This may take a few minutes..."
     # Opening nvim triggers mason-lspconfig's ensure_installed
     # Give it 60 seconds to download and install LSP servers
-    nvim --headless -c "sleep 60" -c "qa!" || true
+    PATH="$NVIM_PATH" nvim --headless -c "sleep 60" -c "qa!" || true
     
     mark_installed "Neovim plugins (Lazy.nvim + TreeSitter)"
     print_success "Neovim plugins installed"
