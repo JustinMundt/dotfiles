@@ -19,7 +19,7 @@ set -e
 # =============================================================================
 
 # Default dotfiles repository (change this to your repo)
-DOTFILES_REPO="${DOTFILES_REPO:-https://github.com/YOUR_USERNAME/dotfiles.git}"
+DOTFILES_REPO="${DOTFILES_REPO:-git@github.com:JustinMundt/dotfiles.git}"
 DOTFILES_DIR="$HOME/.dotfiles"
 
 # Go version to install
@@ -52,6 +52,7 @@ SKIP_TOOLS=false
 SKIP_SHELL=false
 SKIP_DOCKER=false
 SKIP_FONTS=false
+SKIP_KEYD=false
 OS=""
 PKG_MANAGER=""
 SUDO_CMD=""
@@ -131,6 +132,45 @@ mark_installed() {
     INSTALLED_ITEMS+=("$1")
 }
 
+# Check for dotfiles updates from GitHub
+check_dotfiles_update() {
+    # Only check if we're running from an existing dotfiles directory
+    if [ -d "$DOTFILES_DIR/.git" ]; then
+        print_section "Checking for Dotfiles Updates"
+        
+        cd "$DOTFILES_DIR"
+        
+        # Fetch latest from remote
+        print_step "Fetching latest from remote..."
+        git fetch origin 2>/dev/null || {
+            print_warning "Could not fetch from remote (no network or SSH key issue)"
+            return
+        }
+        
+        # Check if we're behind
+        local LOCAL=$(git rev-parse HEAD 2>/dev/null)
+        local REMOTE=$(git rev-parse @{u} 2>/dev/null || echo "")
+        
+        if [ -z "$REMOTE" ]; then
+            print_info "No upstream branch configured, skipping update check"
+            return
+        fi
+        
+        if [ "$LOCAL" != "$REMOTE" ]; then
+            print_info "Updates available from GitHub"
+            if confirm "Pull latest changes from GitHub before proceeding?"; then
+                print_step "Pulling latest changes..."
+                git pull --ff-only || {
+                    print_warning "Could not fast-forward, you may have local changes"
+                    print_info "Continuing with current version..."
+                }
+            fi
+        else
+            print_success "Dotfiles are up to date"
+        fi
+    fi
+}
+
 # =============================================================================
 # Argument Parsing
 # =============================================================================
@@ -149,6 +189,7 @@ show_help() {
     echo "    --skip-docker       Skip Docker installation"
     echo "    --skip-shell        Skip shell setup (zsh, oh-my-zsh)"
     echo "    --skip-fonts        Skip Nerd Font installation"
+    echo "    --skip-keyd         Skip keyd installation (Caps Lock to Ctrl remap)"
     echo "    --dotfiles-repo URL Set custom dotfiles repository URL"
     echo ""
     echo -e "${BOLD}ENVIRONMENT VARIABLES:${NC}"
@@ -202,6 +243,10 @@ parse_args() {
                 ;;
             --skip-fonts)
                 SKIP_FONTS=true
+                shift
+                ;;
+            --skip-keyd)
+                SKIP_KEYD=true
                 shift
                 ;;
             --dotfiles-repo)
@@ -995,6 +1040,87 @@ install_nerd_font() {
 }
 
 # =============================================================================
+# Keyd Installation (Caps Lock to Ctrl)
+# =============================================================================
+
+install_keyd() {
+    # Skip silently on macOS (use System Preferences instead)
+    if [[ "$OS" == "macos" ]]; then
+        return
+    fi
+    
+    if [ "$SKIP_KEYD" = true ]; then
+        print_warning "Skipping keyd (--skip-keyd)"
+        return
+    fi
+    
+    print_header "Installing keyd (Keyboard Remapping)"
+    
+    if command_exists keyd; then
+        print_info "keyd is already installed"
+        # Check if config exists
+        if [ -f /etc/keyd/default.conf ]; then
+            print_info "keyd config already exists at /etc/keyd/default.conf"
+            return
+        fi
+    else
+        if ! confirm "Install keyd (remaps Caps Lock to Ctrl)?"; then
+            print_warning "Skipping keyd"
+            return
+        fi
+        
+        case "$OS" in
+            arch)
+                pkg_install keyd
+                ;;
+            fedora)
+                print_step "Adding keyd COPR repository..."
+                $SUDO_CMD dnf copr enable -y alternateved/keyd
+                pkg_install keyd
+                ;;
+            debian)
+                print_step "Building keyd from source..."
+                
+                # Install build dependencies
+                $SUDO_CMD apt install -y build-essential git
+                
+                # Clone and build
+                local KEYD_TMP="/tmp/keyd-build"
+                rm -rf "$KEYD_TMP"
+                git clone https://github.com/rvaiya/keyd "$KEYD_TMP"
+                cd "$KEYD_TMP"
+                make
+                $SUDO_CMD make install
+                
+                # Clean up
+                cd - >/dev/null
+                rm -rf "$KEYD_TMP"
+                ;;
+        esac
+    fi
+    
+    # Create keyd config
+    print_step "Creating keyd configuration..."
+    $SUDO_CMD mkdir -p /etc/keyd
+    $SUDO_CMD tee /etc/keyd/default.conf > /dev/null <<EOF
+[ids]
+*
+
+[main]
+capslock = leftcontrol
+EOF
+    
+    # Enable and start keyd service
+    print_step "Enabling keyd service..."
+    $SUDO_CMD systemctl enable keyd
+    $SUDO_CMD systemctl restart keyd
+    
+    mark_installed "keyd (Caps Lock -> Ctrl)"
+    print_success "keyd installed and configured"
+    print_info "Caps Lock is now remapped to Ctrl"
+}
+
+# =============================================================================
 # Neovim Post-Install (Lazy.nvim sync + Mason)
 # =============================================================================
 
@@ -1089,6 +1215,7 @@ main() {
     echo "  - Dotfiles configuration"
     echo "  - Shell setup (zsh, oh-my-zsh, plugins)"
     echo "  - Nerd Font"
+    echo "  - Keyboard remapping (Caps Lock -> Ctrl via keyd)"
     echo ""
     
     if [ "$AUTO_YES" = true ]; then
@@ -1100,6 +1227,9 @@ main() {
         echo "Installation cancelled."
         exit 0
     fi
+    
+    # Check for dotfiles updates first (if running from existing dotfiles dir)
+    check_dotfiles_update
     
     # Run installation steps
     detect_os
@@ -1115,6 +1245,7 @@ main() {
     setup_dotfiles
     setup_shell
     install_nerd_font
+    install_keyd
     setup_neovim_plugins
     
     # Print summary
