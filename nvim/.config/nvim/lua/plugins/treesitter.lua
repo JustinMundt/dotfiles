@@ -1,13 +1,11 @@
 return {
   'nvim-treesitter/nvim-treesitter',
   dependencies = {
-    'nvim-treesitter/nvim-treesitter-textobjects',
+    { 'nvim-treesitter/nvim-treesitter-textobjects', branch = 'main' },
   },
   build = ':TSUpdate',
   config = function()
-    -- Defer Treesitter setup after first render to improve startup time
-    vim.defer_fn(function()
-      require('nvim-treesitter.configs').setup {
+    require('nvim-treesitter.configs').setup {
         ensure_installed = {
           'c', 'cpp', 'go', 'lua', 'python', 'rust',
           'tsx', 'javascript', 'typescript', 'vimdoc', 'vim', 'bash',
@@ -68,6 +66,5 @@ return {
           },
         },
       }
-    end, 0)
   end,
 }
