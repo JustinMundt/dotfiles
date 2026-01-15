@@ -60,7 +60,8 @@ SUDO_CMD=""
 # Track what was installed for summary
 INSTALLED_ITEMS=()
 
-# Ensure ~/.local/bin is in PATH early (pip/pipx install here)
+# Ensure ~/.local/bin exists and is in PATH early (pip/pipx install here)
+mkdir -p "$HOME/.local/bin"
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
@@ -485,6 +486,51 @@ install_system_deps() {
     
     mark_installed "System dependencies"
     print_success "System dependencies installed"
+    
+    # Verify critical dependencies were actually installed
+    verify_system_deps
+}
+
+# Verify critical system dependencies are installed
+verify_system_deps() {
+    print_step "Verifying critical system dependencies..."
+    
+    local critical_tools=("git" "stow" "curl" "python3")
+    local missing=()
+    
+    for tool in "${critical_tools[@]}"; do
+        if ! command_exists "$tool"; then
+            missing+=("$tool")
+        fi
+    done
+    
+    if [ ${#missing[@]} -gt 0 ]; then
+        print_error "Critical tools missing: ${missing[*]}"
+        print_error "Bootstrap cannot continue without these tools."
+        exit 1
+    fi
+    
+    # Check for recommended tools (warn but don't exit)
+    local recommended_tools=("pipx" "ripgrep" "fzf" "tmux")
+    local missing_recommended=()
+    
+    for tool in "${recommended_tools[@]}"; do
+        # Handle fd which has different names on different distros
+        if [ "$tool" = "fd" ]; then
+            if ! command_exists fd && ! command_exists fdfind; then
+                missing_recommended+=("fd")
+            fi
+        elif ! command_exists "$tool"; then
+            missing_recommended+=("$tool")
+        fi
+    done
+    
+    if [ ${#missing_recommended[@]} -gt 0 ]; then
+        print_warning "Some recommended tools were not installed: ${missing_recommended[*]}"
+        print_info "These may need to be installed manually or may not be available in your package manager."
+    else
+        print_success "All critical and recommended dependencies verified"
+    fi
 }
 
 # =============================================================================
@@ -499,66 +545,120 @@ install_python_packages() {
         return
     fi
     
+    # Track whether we're using pipx or pip fallback
+    local use_pipx=true
+    
     # Ensure pipx is available and configured
     if ! command_exists pipx; then
-        print_error "pipx not found. It should have been installed with system dependencies."
-        print_info "Attempting to install pipx via pip..."
-        pip3 install --user pipx || {
-            print_error "Failed to install pipx. Cannot proceed with Python packages."
-            return 1
-        }
+        print_warning "pipx not found. Attempting to install it..."
+        
+        # Try installing pipx via apt first (most reliable on Debian/Ubuntu)
+        if [[ "$PKG_MANAGER" == "apt" ]]; then
+            print_step "Installing pipx via apt..."
+            if $SUDO_CMD apt install -y pipx 2>/dev/null; then
+                print_success "pipx installed via apt"
+            fi
+        fi
+        
+        # If still not available, try pip
+        if ! command_exists pipx; then
+            print_step "Attempting to install pipx via pip..."
+            if pip3 install --user pipx 2>/dev/null; then
+                # Add ~/.local/bin to PATH for this session
+                export PATH="$HOME/.local/bin:$PATH"
+                print_success "pipx installed via pip"
+            fi
+        fi
+        
+        # Final check - if pipx still isn't available, fall back to pip for everything
+        if ! command_exists pipx; then
+            print_warning "Could not install pipx. Falling back to pip for Python packages."
+            print_info "Note: pip installs are less isolated but will still work."
+            use_pipx=false
+        fi
     fi
     
-    # Ensure pipx path is configured
-    print_step "Ensuring pipx PATH is configured..."
-    pipx ensurepath 2>/dev/null || true
+    # CLI tools to install
+    local python_cli_packages=("black" "ruff" "yamllint")
     
-    # CLI tools to install via pipx (isolated environments, proper PATH handling)
-    local pipx_packages=("black" "ruff" "yamllint")
-    
-    print_step "Installing Python CLI tools via pipx..."
-    for pkg in "${pipx_packages[@]}"; do
-        print_step "Installing $pkg..."
-        if pipx install "$pkg"; then
-            print_success "$pkg installed"
-        else
-            # pipx install fails if already installed, try upgrade instead
-            print_info "$pkg may already be installed, attempting upgrade..."
-            pipx upgrade "$pkg" || print_warning "Could not install/upgrade $pkg"
-        fi
-    done
+    if [ "$use_pipx" = true ]; then
+        # Ensure pipx path is configured (--force ensures shell configs are updated)
+        print_step "Ensuring pipx PATH is configured..."
+        pipx ensurepath --force 2>/dev/null || true
+        
+        print_step "Installing Python CLI tools via pipx..."
+        for pkg in "${python_cli_packages[@]}"; do
+            print_step "Installing $pkg..."
+            # Use --force to overwrite/recreate symlinks if they exist or are broken
+            if pipx install --force "$pkg" 2>/dev/null; then
+                print_success "$pkg installed via pipx"
+            else
+                print_warning "pipx failed for $pkg, trying pip fallback..."
+                pip3 install --user "$pkg" 2>/dev/null || \
+                pip3 install --user --break-system-packages "$pkg" 2>/dev/null || \
+                print_error "Could not install $pkg"
+            fi
+        done
+    else
+        # Fallback: install everything via pip
+        print_step "Installing Python CLI tools via pip..."
+        for pkg in "${python_cli_packages[@]}"; do
+            print_step "Installing $pkg..."
+            if pip3 install --user "$pkg" 2>/dev/null; then
+                print_success "$pkg installed via pip"
+            elif pip3 install --user --break-system-packages "$pkg" 2>/dev/null; then
+                print_success "$pkg installed via pip (with --break-system-packages)"
+            else
+                print_error "Could not install $pkg"
+            fi
+        done
+    fi
     
     # pynvim must be installed via pip (it's a library, not a CLI tool)
     print_step "Installing pynvim via pip..."
-    if pip3 install --user pynvim; then
+    if pip3 install --user pynvim 2>/dev/null; then
         print_success "pynvim installed"
-    elif pip3 install --user --break-system-packages pynvim; then
+    elif pip3 install --user --break-system-packages pynvim 2>/dev/null; then
         print_success "pynvim installed (with --break-system-packages)"
     else
         print_error "Failed to install pynvim"
         print_info "You may need to install it manually: pip3 install --user pynvim"
     fi
     
-    # Verify installations
+    # Verify installations and fix broken symlinks (only if using pipx)
     print_step "Verifying Python tool installations..."
     local failed=()
+    local needs_reinstall=false
     
-    if command_exists black; then
-        print_success "black is accessible: $(black --version 2>&1 | head -1)"
-    else
-        failed+=("black")
-    fi
+    for pkg in "${python_cli_packages[@]}"; do
+        if command_exists "$pkg"; then
+            print_success "$pkg is accessible"
+        elif [ "$use_pipx" = true ] && pipx list 2>/dev/null | grep -q "package $pkg"; then
+            # Check if pipx has it installed but symlink is missing
+            print_warning "$pkg installed but symlink missing, will reinstall..."
+            needs_reinstall=true
+            failed+=("$pkg")
+        else
+            print_error "$pkg not found in PATH"
+            failed+=("$pkg")
+        fi
+    done
     
-    if command_exists ruff; then
-        print_success "ruff is accessible: $(ruff --version 2>&1)"
-    else
-        failed+=("ruff")
-    fi
-    
-    if command_exists yamllint; then
-        print_success "yamllint is accessible: $(yamllint --version 2>&1)"
-    else
-        failed+=("yamllint")
+    # If any symlinks are missing, run pipx reinstall-all to fix them
+    if [ "$use_pipx" = true ] && [ "$needs_reinstall" = true ]; then
+        print_step "Reinstalling pipx packages to fix missing symlinks..."
+        pipx reinstall-all
+        
+        # Re-verify after reinstall
+        print_step "Re-verifying after reinstall..."
+        failed=()
+        for pkg in "${python_cli_packages[@]}"; do
+            if command_exists "$pkg"; then
+                print_success "$pkg is now accessible"
+            else
+                failed+=("$pkg")
+            fi
+        done
     fi
     
     # Check pynvim
@@ -572,9 +672,15 @@ install_python_packages() {
         print_warning "Some packages failed verification: ${failed[*]}"
         print_info "Ensure ~/.local/bin is in your PATH"
         print_info "You may need to restart your shell or run: source ~/.zshrc"
+    else
+        print_success "All Python tools verified successfully"
     fi
     
-    mark_installed "Python: pynvim, black, ruff, yamllint (via pipx)"
+    if [ "$use_pipx" = true ]; then
+        mark_installed "Python: pynvim, black, ruff, yamllint (via pipx)"
+    else
+        mark_installed "Python: pynvim, black, ruff, yamllint (via pip)"
+    fi
     print_success "Python packages installed"
 }
 
@@ -1441,6 +1547,68 @@ setup_neovim_plugins() {
 }
 
 # =============================================================================
+# Final Verification
+# =============================================================================
+
+verify_installation() {
+    print_header "Verifying Installation"
+    
+    local warnings=()
+    
+    # Check formatters that neovim's conform.nvim uses
+    print_step "Checking formatters for Neovim..."
+    local formatters=("black" "ruff" "stylua" "prettierd" "shfmt" "gofumpt")
+    local missing_formatters=()
+    
+    for formatter in "${formatters[@]}"; do
+        if command_exists "$formatter"; then
+            print_success "$formatter is available"
+        else
+            missing_formatters+=("$formatter")
+        fi
+    done
+    
+    if [ ${#missing_formatters[@]} -gt 0 ]; then
+        warnings+=("Missing formatters: ${missing_formatters[*]}")
+        print_warning "Some formatters are not installed: ${missing_formatters[*]}"
+        print_info "Neovim will skip formatting for filetypes that use these formatters."
+    fi
+    
+    # Check linters
+    print_step "Checking linters..."
+    local linters=("shellcheck" "luacheck")
+    local missing_linters=()
+    
+    for linter in "${linters[@]}"; do
+        if command_exists "$linter"; then
+            print_success "$linter is available"
+        else
+            missing_linters+=("$linter")
+        fi
+    done
+    
+    if [ ${#missing_linters[@]} -gt 0 ]; then
+        warnings+=("Missing linters: ${missing_linters[*]}")
+        print_warning "Some linters are not installed: ${missing_linters[*]}"
+    fi
+    
+    # Check PATH includes ~/.local/bin
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        warnings+=("~/.local/bin is not in PATH")
+        print_warning "~/.local/bin is not in your current PATH"
+        print_info "Add this to your shell config: export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+    
+    # Return warnings for summary
+    if [ ${#warnings[@]} -gt 0 ]; then
+        VERIFICATION_WARNINGS=("${warnings[@]}")
+    fi
+}
+
+# Global to track verification warnings
+VERIFICATION_WARNINGS=()
+
+# =============================================================================
 # Summary
 # =============================================================================
 
@@ -1451,6 +1619,15 @@ print_summary() {
         echo -e "${GREEN}${BOLD}Installed:${NC}"
         for item in "${INSTALLED_ITEMS[@]}"; do
             echo -e "  ${GREEN}*${NC} $item"
+        done
+        echo ""
+    fi
+    
+    # Show verification warnings if any
+    if [ ${#VERIFICATION_WARNINGS[@]} -gt 0 ]; then
+        echo -e "${YELLOW}${BOLD}Warnings:${NC}"
+        for warning in "${VERIFICATION_WARNINGS[@]}"; do
+            echo -e "  ${YELLOW}!${NC} $warning"
         done
         echo ""
     fi
@@ -1547,6 +1724,9 @@ main() {
     install_nerd_font
     install_keyd
     setup_neovim_plugins
+    
+    # Verify everything was installed correctly
+    verify_installation
     
     # Print summary
     print_summary
