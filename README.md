@@ -275,7 +275,7 @@ Language servers are auto-installed via Mason:
 | Lua | lua_ls | LuaJIT runtime, vim globals |
 | Python | pyright | Type checking, diagnostics |
 | TypeScript/JavaScript | typescript-tools.nvim | Enhanced TS support, inlay hints |
-| Go | gopls | staticcheck, gofumpt |
+| Go | gopls | staticcheck, gofumpt (installed via bootstrap, not Mason) |
 | Rust | rust_analyzer | clippy on save, cargo features |
 | C/C++ | clangd | clang-tidy, background indexing |
 | Bash | bashls | Shellcheck integration |

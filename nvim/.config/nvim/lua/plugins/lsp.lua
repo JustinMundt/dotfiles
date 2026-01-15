@@ -3,6 +3,7 @@
 
 -- List of LSP servers to enable
 -- Note: TypeScript/JavaScript handled by typescript-tools.nvim (not ts_ls)
+-- Note: gopls installed via bootstrap.sh (go install), not Mason
 local servers = {
   'lua_ls',
   'pyright',
@@ -17,6 +18,11 @@ local servers = {
   'dockerls',
   'tailwindcss',
 }
+
+-- Servers for Mason to install (excludes gopls - installed via go install)
+local mason_ensure_installed = vim.tbl_filter(function(s)
+  return s ~= 'gopls'
+end, servers)
 
 return {
   {
@@ -57,7 +63,7 @@ return {
       -- Mason setup for automatic LSP installation
       require('mason').setup()
       require('mason-lspconfig').setup({
-        ensure_installed = servers,
+        ensure_installed = mason_ensure_installed,
         automatic_installation = true,
       })
 

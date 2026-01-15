@@ -587,7 +587,11 @@ install_go_tools() {
         return
     fi
     
-    print_step "Installing Go-based linters and formatters..."
+    print_step "Installing Go-based tools..."
+    
+    # gopls - Go language server (installed here instead of Mason to avoid errors)
+    print_step "Installing gopls..."
+    go install golang.org/x/tools/gopls@latest
     
     # gofumpt - stricter gofmt
     print_step "Installing gofumpt..."
@@ -601,7 +605,7 @@ install_go_tools() {
     print_step "Installing golangci-lint..."
     go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
     
-    mark_installed "Go tools: gofumpt, shfmt, golangci-lint"
+    mark_installed "Go tools: gopls, gofumpt, shfmt, golangci-lint"
     print_success "Go tools installed"
 }
 
