@@ -83,5 +83,10 @@ return {
       end,
       formatters_by_ft = formatters_by_ft,
     })
+
+    -- Create global :Format command (available regardless of LSP attachment)
+    vim.api.nvim_create_user_command('Format', function()
+      conform.format({ bufnr = 0 })
+    end, { desc = 'Format current buffer with conform.nvim' })
   end,
 }
