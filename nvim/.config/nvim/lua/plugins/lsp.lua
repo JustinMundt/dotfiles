@@ -89,8 +89,8 @@ return {
             map('n', 'gr', telescope.lsp_references, '[G]oto [R]eferences')
             map('n', 'gI', telescope.lsp_implementations, '[G]oto [I]mplementation')
             map('n', '<leader>D', telescope.lsp_type_definitions, 'Type [D]efinition')
-            map('n', '<leader>ds', telescope.lsp_document_symbols, '[D]ocument [S]ymbols')
-            map('n', '<leader>ws', telescope.lsp_dynamic_workspace_symbols, '[W]orkspace [S]ymbols')
+            map('n', '<leader>ss', telescope.lsp_document_symbols, 'Document [S]ymbols')
+            map('n', '<leader>sS', telescope.lsp_dynamic_workspace_symbols, 'Workspace [S]ymbols')
           else
             -- Fallback to built-in LSP functions
             map('n', 'gd', vim.lsp.buf.definition, '[G]oto [D]efinition')
