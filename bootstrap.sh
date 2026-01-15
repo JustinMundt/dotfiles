@@ -389,11 +389,16 @@ install_system_deps() {
                 tmux \
                 zsh \
                 clang \
+                clang-format \
                 cmake \
                 gettext \
                 python3 \
                 python3-pip \
-                python3-venv
+                python3-venv \
+                shellcheck \
+                luarocks
+            # Install luacheck via luarocks
+            $SUDO_CMD luarocks install luacheck 2>/dev/null || true
             ;;
         fedora)
             pkg_install \
@@ -411,10 +416,15 @@ install_system_deps() {
                 tmux \
                 zsh \
                 clang \
+                clang-tools-extra \
                 cmake \
                 gettext \
                 python3 \
-                python3-pip
+                python3-pip \
+                ShellCheck \
+                luarocks
+            # Install luacheck via luarocks
+            $SUDO_CMD luarocks install luacheck 2>/dev/null || true
             ;;
         arch)
             pkg_install \
@@ -433,7 +443,9 @@ install_system_deps() {
                 cmake \
                 gettext \
                 python \
-                python-pip
+                python-pip \
+                shellcheck \
+                luacheck
             ;;
         macos)
             # Check for Homebrew
@@ -455,7 +467,10 @@ install_system_deps() {
                 zsh \
                 cmake \
                 gettext \
-                python3
+                python3 \
+                clang-format \
+                shellcheck \
+                luacheck
             ;;
     esac
     
@@ -464,30 +479,33 @@ install_system_deps() {
 }
 
 # =============================================================================
-# Python Setup (pynvim)
+# Python Setup (pynvim + linters/formatters)
 # =============================================================================
 
 install_python_packages() {
     print_section "Python Packages"
     
-    if ! confirm "Install Python packages (pynvim for Neovim support)?"; then
+    if ! confirm "Install Python packages (pynvim, black, ruff, yamllint)?"; then
         print_warning "Skipping Python packages"
         return
     fi
     
-    print_step "Installing pynvim..."
+    print_step "Installing Python packages..."
+    
+    # Packages to install: pynvim (Neovim), black (formatter), ruff (linter), yamllint (YAML linter)
+    local python_packages="pynvim black ruff yamllint"
     
     # Use pip with --user or system pip depending on OS
     if [[ "$OS" == "macos" ]]; then
-        pip3 install --user pynvim
+        pip3 install --user $python_packages
     else
         # On Linux, try pip3 with --break-system-packages for newer systems
-        pip3 install --user pynvim 2>/dev/null || \
-        pip3 install --user --break-system-packages pynvim 2>/dev/null || \
-        $SUDO_CMD pip3 install pynvim
+        pip3 install --user $python_packages 2>/dev/null || \
+        pip3 install --user --break-system-packages $python_packages 2>/dev/null || \
+        $SUDO_CMD pip3 install $python_packages
     fi
     
-    mark_installed "Python: pynvim"
+    mark_installed "Python: pynvim, black, ruff, yamllint"
     print_success "Python packages installed"
 }
 
@@ -556,6 +574,35 @@ install_go() {
     mark_installed "Go $GO_VERSION"
     print_success "Go $GO_VERSION installed to /usr/local/go"
     print_info "Add to your PATH: export PATH=\$PATH:/usr/local/go/bin"
+    
+    # Install Go-based linters and formatters
+    install_go_tools
+}
+
+install_go_tools() {
+    print_section "Go Tools (linters/formatters)"
+    
+    if ! command_exists go; then
+        print_warning "Go not installed, skipping Go tools"
+        return
+    fi
+    
+    print_step "Installing Go-based linters and formatters..."
+    
+    # gofumpt - stricter gofmt
+    print_step "Installing gofumpt..."
+    go install mvdan.cc/gofumpt@latest
+    
+    # shfmt - shell formatter
+    print_step "Installing shfmt..."
+    go install mvdan.cc/sh/v3/cmd/shfmt@latest
+    
+    # golangci-lint - comprehensive Go linter
+    print_step "Installing golangci-lint..."
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+    
+    mark_installed "Go tools: gofumpt, shfmt, golangci-lint"
+    print_success "Go tools installed"
 }
 
 # =============================================================================
@@ -593,6 +640,29 @@ install_rust() {
         mark_installed "Rust (rustup)"
         print_success "Rust installed"
     fi
+    
+    # Install Rust-based tools (stylua for Lua formatting)
+    install_rust_tools
+}
+
+install_rust_tools() {
+    print_section "Rust Tools (linters/formatters)"
+    
+    if ! command_exists cargo; then
+        print_warning "Cargo not installed, skipping Rust tools"
+        return
+    fi
+    
+    # Ensure rustfmt and clippy are installed (they come with rustup but verify)
+    print_step "Ensuring rustfmt and clippy are installed..."
+    rustup component add rustfmt clippy 2>/dev/null || true
+    
+    # stylua - Lua formatter
+    print_step "Installing stylua (Lua formatter)..."
+    cargo install stylua
+    
+    mark_installed "Rust tools: stylua, rustfmt, clippy"
+    print_success "Rust tools installed"
 }
 
 # =============================================================================
@@ -632,6 +702,29 @@ install_nodejs() {
     
     mark_installed "Node.js (nvm + LTS)"
     print_success "Node.js LTS installed via nvm"
+    
+    # Install Node.js-based linters and formatters
+    install_node_tools
+}
+
+install_node_tools() {
+    print_section "Node.js Tools (linters/formatters)"
+    
+    if ! command_exists npm; then
+        print_warning "npm not installed, skipping Node.js tools"
+        return
+    fi
+    
+    print_step "Installing Node.js-based linters and formatters..."
+    
+    # prettierd - faster prettier daemon
+    # eslint_d - faster eslint daemon
+    # jsonlint - JSON linter
+    # markdownlint-cli - Markdown linter
+    npm install -g @fsouza/prettierd eslint_d jsonlint markdownlint-cli
+    
+    mark_installed "Node.js tools: prettierd, eslint_d, jsonlint, markdownlint-cli"
+    print_success "Node.js tools installed"
 }
 
 # =============================================================================
@@ -807,6 +900,50 @@ install_docker() {
     
     mark_installed "Docker"
     print_success "Docker installed"
+    
+    # Install hadolint for Dockerfile linting
+    install_hadolint
+}
+
+# =============================================================================
+# Hadolint Installation (Dockerfile linter)
+# =============================================================================
+
+install_hadolint() {
+    print_section "Hadolint (Dockerfile Linter)"
+    
+    if command_exists hadolint; then
+        print_info "hadolint is already installed"
+        return
+    fi
+    
+    print_step "Installing hadolint..."
+    
+    case "$OS" in
+        macos)
+            brew install hadolint
+            ;;
+        *)
+            # Download binary from GitHub releases
+            local arch
+            case "$(uname -m)" in
+                x86_64) arch="x86_64" ;;
+                aarch64|arm64) arch="arm64" ;;
+                *) 
+                    print_warning "Unsupported architecture for hadolint: $(uname -m)"
+                    return
+                    ;;
+            esac
+            
+            local hadolint_url="https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-${arch}"
+            curl -fsSL -o /tmp/hadolint "$hadolint_url"
+            chmod +x /tmp/hadolint
+            $SUDO_CMD mv /tmp/hadolint /usr/local/bin/hadolint
+            ;;
+    esac
+    
+    mark_installed "hadolint"
+    print_success "hadolint installed"
 }
 
 # =============================================================================
@@ -1288,9 +1425,19 @@ main() {
     echo -e "${BOLD}This script will set up your development environment.${NC}"
     echo ""
     echo "Components to install:"
-    echo "  - System dependencies (git, stow, ripgrep, fzf, tmux, etc.)"
+    echo "  - System dependencies (git, stow, ripgrep, fzf, tmux, shellcheck, etc.)"
     echo "  - Development languages (Go, Rust, Node.js)"
     echo "  - Development tools (lazygit, GitHub CLI, Docker)"
+    echo "  - Linters & Formatters per language:"
+    echo "      Lua: stylua, luacheck"
+    echo "      Python: black, ruff, yamllint"
+    echo "      JS/TS: prettierd, eslint_d"
+    echo "      Go: gofumpt, golangci-lint"
+    echo "      Rust: rustfmt, clippy"
+    echo "      Shell: shfmt, shellcheck"
+    echo "      C/C++: clang-format"
+    echo "      Docker: hadolint"
+    echo "      JSON/YAML/Markdown: jsonlint, markdownlint"
     echo "  - Neovim with plugins"
     echo "  - Dotfiles configuration"
     echo "  - Shell setup (zsh, oh-my-zsh, plugins)"
