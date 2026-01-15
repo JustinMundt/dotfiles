@@ -60,6 +60,11 @@ SUDO_CMD=""
 # Track what was installed for summary
 INSTALLED_ITEMS=()
 
+# Ensure ~/.local/bin is in PATH early (pip/pipx install here)
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -395,6 +400,7 @@ install_system_deps() {
                 python3 \
                 python3-pip \
                 python3-venv \
+                pipx \
                 shellcheck \
                 luarocks
             # Install luacheck via luarocks
@@ -421,6 +427,7 @@ install_system_deps() {
                 gettext \
                 python3 \
                 python3-pip \
+                pipx \
                 ShellCheck \
                 luarocks
             # Install luacheck via luarocks
@@ -444,6 +451,7 @@ install_system_deps() {
                 gettext \
                 python \
                 python-pip \
+                python-pipx \
                 shellcheck \
                 luacheck
             ;;
@@ -468,6 +476,7 @@ install_system_deps() {
                 cmake \
                 gettext \
                 python3 \
+                pipx \
                 clang-format \
                 shellcheck \
                 luacheck
@@ -490,22 +499,82 @@ install_python_packages() {
         return
     fi
     
-    print_step "Installing Python packages..."
-    
-    # Packages to install: pynvim (Neovim), black (formatter), ruff (linter), yamllint (YAML linter)
-    local python_packages="pynvim black ruff yamllint"
-    
-    # Use pip with --user or system pip depending on OS
-    if [[ "$OS" == "macos" ]]; then
-        pip3 install --user $python_packages
-    else
-        # On Linux, try pip3 with --break-system-packages for newer systems
-        pip3 install --user $python_packages 2>/dev/null || \
-        pip3 install --user --break-system-packages $python_packages 2>/dev/null || \
-        $SUDO_CMD pip3 install $python_packages
+    # Ensure pipx is available and configured
+    if ! command_exists pipx; then
+        print_error "pipx not found. It should have been installed with system dependencies."
+        print_info "Attempting to install pipx via pip..."
+        pip3 install --user pipx || {
+            print_error "Failed to install pipx. Cannot proceed with Python packages."
+            return 1
+        }
     fi
     
-    mark_installed "Python: pynvim, black, ruff, yamllint"
+    # Ensure pipx path is configured
+    print_step "Ensuring pipx PATH is configured..."
+    pipx ensurepath 2>/dev/null || true
+    
+    # CLI tools to install via pipx (isolated environments, proper PATH handling)
+    local pipx_packages=("black" "ruff" "yamllint")
+    
+    print_step "Installing Python CLI tools via pipx..."
+    for pkg in "${pipx_packages[@]}"; do
+        print_step "Installing $pkg..."
+        if pipx install "$pkg"; then
+            print_success "$pkg installed"
+        else
+            # pipx install fails if already installed, try upgrade instead
+            print_info "$pkg may already be installed, attempting upgrade..."
+            pipx upgrade "$pkg" || print_warning "Could not install/upgrade $pkg"
+        fi
+    done
+    
+    # pynvim must be installed via pip (it's a library, not a CLI tool)
+    print_step "Installing pynvim via pip..."
+    if pip3 install --user pynvim; then
+        print_success "pynvim installed"
+    elif pip3 install --user --break-system-packages pynvim; then
+        print_success "pynvim installed (with --break-system-packages)"
+    else
+        print_error "Failed to install pynvim"
+        print_info "You may need to install it manually: pip3 install --user pynvim"
+    fi
+    
+    # Verify installations
+    print_step "Verifying Python tool installations..."
+    local failed=()
+    
+    if command_exists black; then
+        print_success "black is accessible: $(black --version 2>&1 | head -1)"
+    else
+        failed+=("black")
+    fi
+    
+    if command_exists ruff; then
+        print_success "ruff is accessible: $(ruff --version 2>&1)"
+    else
+        failed+=("ruff")
+    fi
+    
+    if command_exists yamllint; then
+        print_success "yamllint is accessible: $(yamllint --version 2>&1)"
+    else
+        failed+=("yamllint")
+    fi
+    
+    # Check pynvim
+    if python3 -c "import pynvim" 2>/dev/null; then
+        print_success "pynvim is importable"
+    else
+        failed+=("pynvim")
+    fi
+    
+    if [ ${#failed[@]} -gt 0 ]; then
+        print_warning "Some packages failed verification: ${failed[*]}"
+        print_info "Ensure ~/.local/bin is in your PATH"
+        print_info "You may need to restart your shell or run: source ~/.zshrc"
+    fi
+    
+    mark_installed "Python: pynvim, black, ruff, yamllint (via pipx)"
     print_success "Python packages installed"
 }
 
