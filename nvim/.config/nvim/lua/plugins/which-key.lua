@@ -12,11 +12,11 @@ return {
       { '<leader>c', group = '[C]ode' },
       { '<leader>d', group = '[D]ocument' },
       { '<leader>g', group = '[G]it' },
-      { '<leader>h', group = 'More git' },
+      { '<leader>h', group = '[H]arpoon' },
       { '<leader>r', group = '[R]ename' },
       { '<leader>s', group = '[S]earch' },
       { '<leader>w', group = '[W]orkspace' },
-      { '<leader>P', group = '[P]aste keep original' },
+      { '<leader>p', group = '[P]aste keep original' },
     })
   end,
 }

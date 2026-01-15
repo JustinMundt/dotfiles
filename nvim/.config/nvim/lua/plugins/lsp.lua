@@ -2,10 +2,10 @@
 -- Uses vim.lsp.config API instead of deprecated lspconfig.setup()
 
 -- List of LSP servers to enable
+-- Note: TypeScript/JavaScript handled by typescript-tools.nvim (not ts_ls)
 local servers = {
   'lua_ls',
   'pyright',
-  'ts_ls',
   'clangd',
   'gopls',
   'rust_analyzer',

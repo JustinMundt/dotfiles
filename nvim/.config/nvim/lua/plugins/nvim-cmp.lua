@@ -8,6 +8,10 @@ return {
     -- Adds LSP completion capabilities
     'hrsh7th/cmp-nvim-lsp',
 
+    -- Buffer and path completion
+    'hrsh7th/cmp-buffer',
+    'hrsh7th/cmp-path',
+
     -- Adds a number of user-friendly snippets
     'rafamadriz/friendly-snippets',
   },
@@ -58,7 +62,17 @@ return {
       sources = {
         { name = 'nvim_lsp' },
         { name = 'luasnip' },
+        { name = 'buffer' },
+        { name = 'path' },
       },
     }
+
+    -- SQL-specific completion (vim-dadbod)
+    cmp.setup.filetype({ 'sql', 'mysql', 'plsql' }, {
+      sources = cmp.config.sources({
+        { name = 'vim-dadbod-completion' },
+        { name = 'buffer' },
+      }),
+    })
   end,
 }
